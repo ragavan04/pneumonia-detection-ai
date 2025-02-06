@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Pneumonia Detection</title>
+    <link rel="stylesheet" type="text/css" href="/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Pneumonia Detection</h1>
+        <p>Upload a chest X-ray image to see the prediction.</p>
+        <form id="upload-form" action="/predict" method="POST" enctype="multipart/form-data">
+            <input type="file" name="file" accept="image/*" required>
+            <button type="submit">Predict</button>
+        </form>
+        <div id="result"></div>
+    </div>
+    
+    <script>
+      // Use JavaScript to handle the form submission via AJAX,
+      // so the page doesn't reload.
+      const form = document.getElementById('upload-form');
+      form.addEventListener('submit', async function(e) {
+          e.preventDefault();
+          const formData = new FormData(form);
+          const response = await fetch('/predict', { method: 'POST', body: formData });
+          const data = await response.json();
+          const resultDiv = document.getElementById('result');
+          if(data.error) {
+              resultDiv.innerHTML = '<p class="error">' + data.error + '</p>';
+          } else {
+              resultDiv.innerHTML = '<p class="success">Prediction: ' + data.prediction +
+                                    '<br>Confidence: ' + data.confidence.toFixed(2) + '</p>';
+          }
+      });
+    </script>
+</body>
+</html>
