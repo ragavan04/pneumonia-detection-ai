@@ -1,1 +1,1 @@
-# pneumonia-detection-ai
+# Pneumonia Detection AI
