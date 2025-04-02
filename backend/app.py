@@ -63,6 +63,11 @@ def add_cors_headers(response):
 def options_handler():
     return '', 204
 
+# Add a root route for health checks
+@app.route('/')
+def health_check():
+    return jsonify({"status": "healthy", "message": "Pneumonia Detection API is running"})
+
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def serve(path):
@@ -324,6 +329,8 @@ def predict():
             
     return jsonify({"error": "File upload failed"}), 400
 
-if __name__ == "__main__":
-    app.run(debug=True, port=5000, host='0.0.0.0')
+if __name__ == '__main__':
+    # Get port from environment variable or default to 10000
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port)
 
