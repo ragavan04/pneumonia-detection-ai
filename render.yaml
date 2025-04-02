@@ -3,11 +3,13 @@ services:
     name: pneumonia-detection-api
     runtime: python
     buildCommand: pip install -r backend/requirements.txt
-    startCommand: cd backend && gunicorn app:app --bind 0.0.0.0:10000
+    startCommand: cd backend && gunicorn app_minimal:app --config=gunicorn_config.py --log-level=debug --log-file=- --preload
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.0
       - key: PORT
         value: 10000
+      - key: PYTHONUNBUFFERED
+        value: "1"
     healthCheckPath: /
     autoDeploy: true
