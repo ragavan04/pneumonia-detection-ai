@@ -1,0 +1,8 @@
+# Ignore backend directory
+backend/
+# Ignore development files
+node_modules/
+.env.development
+# Ignore git files
+.git/
+.gitignore 
