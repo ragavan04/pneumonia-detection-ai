@@ -42,27 +42,29 @@ else:
 # Add CORS headers to every response
 @app.after_request
 def add_cors_headers(response):
-    # Allow requests from localhost and our Vercel app
+    origin = request.headers.get('Origin')
     allowed_origins = [
         'http://localhost:3000',
         'https://pneumonia-detection-ai.vercel.app',
-        'https://pneumonia-detection-ai-*.vercel.app',  # For preview deployments
-        'https://pneumonia-detection-api-5tb5.onrender.com'  # Allow the Render domain itself
+        'https://pneumonia-detection-ai-git-main-ragavans-projects.vercel.app',
+        'https://pneumonia-detection-ai-ragavans-projects.vercel.app',
+        'https://pneumonia-detection-5omcypo3k-ragavans-projects-a2a77390.vercel.app'
     ]
     
-    origin = request.headers.get('Origin')
-    if origin in allowed_origins or request.method == 'OPTIONS':
-        response.headers.add('Access-Control-Allow-Origin', origin or '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
+    # Check if origin matches any allowed pattern
+    is_allowed = any(
+        origin == allowed or
+        (allowed.endswith('.vercel.app') and origin and origin.endswith('.vercel.app'))
+        for allowed in allowed_origins
+    )
+    
+    if is_allowed or request.method == 'OPTIONS':
+        response.headers['Access-Control-Allow-Origin'] = origin or '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
     
     return response
-
-# Add an OPTIONS handler for preflight requests
-@app.route('/api/predict', methods=['OPTIONS'])
-def options_handler():
-    return '', 204
 
 # Add a root route for health checks
 @app.route('/')
@@ -264,71 +266,59 @@ def create_overlay_heatmap(original_img, heatmap, alpha=0.5):
     
     return overlay
 
-@app.route("/api/predict", methods=["POST", "OPTIONS"])
+@app.route("/api/predict", methods=["POST"])
 def predict():
-    if request.method == "OPTIONS":
-        return "", 200
-        
     if "file" not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
 
     file = request.files["file"]
-    if file:
+    if not file:
+        return jsonify({"error": "Empty file"}), 400
+
+    try:
         file_bytes = file.read()
         file_stream = BytesIO(file_bytes)
+        original_img = Image.open(file_stream).convert("RGB")
+        original_size = original_img.size
+        
+        img = original_img.resize((224, 224))
+        img_array = np.array(img) / 255.0
+        img_array = np.expand_dims(img_array, axis=0)
+        
+        if model is None:
+            return jsonify({"error": "Model not loaded"}), 500
+            
+        prob = model.predict(img_array)[0][0]
+        
         try:
-            original_img = Image.open(file_stream).convert("RGB")
-            original_size = original_img.size
+            print("Generating Grad-CAM heatmap...")
+            heatmap = generate_gradcam_simple(img_array, model)
+            print("Successfully generated Grad-CAM heatmap")
             
-            img = original_img.resize((224, 224))
+            heatmap_img = create_colored_heatmap(heatmap, original_size)
+            heatmap_base64 = encode_image_to_base64(heatmap_img)
             
-            img_array = np.array(img) / 255.0
-            img_array = np.expand_dims(img_array, axis=0)
-            prob = model.predict(img_array)[0][0]
+            overlay_img = create_overlay_heatmap(original_img, heatmap, alpha=0.6)
+            overlay_base64 = encode_image_to_base64(overlay_img)
             
-            try:
-                print("Generating Grad-CAM heatmap...")
-                heatmap = generate_gradcam_simple(img_array, model)
-                print("Successfully generated Grad-CAM heatmap")
-                
-                heatmap_img = create_colored_heatmap(heatmap, original_size)
-                heatmap_base64 = encode_image_to_base64(heatmap_img)
-                
-                overlay_img = create_overlay_heatmap(original_img, heatmap, alpha=0.6)
-                overlay_base64 = encode_image_to_base64(overlay_img)
-                
-            except Exception as e:
-                print(f"Failed to generate heatmap: {str(e)}")
-                heatmap_img = Image.new('RGB', original_size, (200, 200, 200))
-                draw = ImageDraw.Draw(heatmap_img)
-                draw.text((20, 20), "Heatmap generation failed", fill=(0, 0, 0))
-                heatmap_base64 = encode_image_to_base64(heatmap_img)
-                
-                overlay_img = original_img.copy()
-                overlay_base64 = encode_image_to_base64(overlay_img)
+            return jsonify({
+                "probability": float(prob),
+                "prediction": "PNEUMONIA" if prob > 0.5 else "NORMAL",
+                "heatmap": heatmap_base64,
+                "overlay": overlay_base64
+            })
             
-            original_base64 = encode_image_to_base64(original_img)
-            
-            if prob > 0.5:
-                return jsonify({
-                    "prediction": "PNEUMONIA", 
-                    "confidence": float(prob),
-                    "original_image": original_base64,
-                    "heatmap_image": heatmap_base64,
-                    "overlay_image": overlay_base64
-                })
-            else:
-                return jsonify({
-                    "prediction": "NORMAL", 
-                    "confidence": float(1.0 - prob),
-                    "original_image": original_base64,
-                    "heatmap_image": heatmap_base64,
-                    "overlay_image": overlay_base64
-                })
         except Exception as e:
-            return jsonify({"error": f"Error processing image: {str(e)}"}), 400
+            print(f"Error generating heatmap: {str(e)}", file=sys.stderr)
+            # Return prediction even if heatmap generation fails
+            return jsonify({
+                "probability": float(prob),
+                "prediction": "PNEUMONIA" if prob > 0.5 else "NORMAL"
+            })
             
-    return jsonify({"error": "File upload failed"}), 400
+    except Exception as e:
+        print(f"Error processing image: {str(e)}", file=sys.stderr)
+        return jsonify({"error": str(e)}), 400
 
 if __name__ == '__main__':
     # Get port from environment variable or default to 10000
