@@ -14,24 +14,13 @@ from matplotlib import cm
 import io
 import sys
 
-# Add startup logging to help diagnose deployment issues
-print(f"TensorFlow version: {tf.__version__}", file=sys.stderr)
-print(f"Python version: {sys.version}", file=sys.stderr)
-print(f"GPU available: {tf.config.list_physical_devices('GPU')}", file=sys.stderr)
-print(f"Working directory: {os.getcwd()}", file=sys.stderr)
-print(f"Environment variables: PORT={os.environ.get('PORT')}", file=sys.stderr)
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(BASE_DIR)
-
-print(f"BASE_DIR: {BASE_DIR}", file=sys.stderr)
-print(f"PROJECT_ROOT: {PROJECT_ROOT}", file=sys.stderr)
 
 app = Flask(__name__, static_folder=os.path.join(PROJECT_ROOT, 'build'))
 
 # Load model with better error handling
 model_path = os.path.join(BASE_DIR, "models", "pneumonia_mobilenetv2.keras")
-print(f"Looking for model at: {model_path}", file=sys.stderr)
 if not os.path.exists(model_path):
     print(f"Error: Model file not found at {model_path}", file=sys.stderr)
     # Create models directory if it doesn't exist
@@ -57,7 +46,8 @@ def add_cors_headers(response):
     allowed_origins = [
         'http://localhost:3000',
         'https://pneumonia-detection-ai.vercel.app',
-        'https://pneumonia-detection-ai-*.vercel.app'  # For preview deployments
+        'https://pneumonia-detection-ai-*.vercel.app',  # For preview deployments
+        'https://pneumonia-detection-api-5tb5.onrender.com'  # Allow the Render domain itself
     ]
     
     origin = request.headers.get('Origin')
@@ -341,13 +331,7 @@ def predict():
     return jsonify({"error": "File upload failed"}), 400
 
 if __name__ == '__main__':
-    try:
-        # Get port from environment variable or default to 10000
-        port = int(os.environ.get('PORT', 10000))
-        print(f"Starting app on port {port}", file=sys.stderr)
-        app.run(host='0.0.0.0', port=port)
-    except Exception as e:
-        print(f"Error during startup: {str(e)}", file=sys.stderr)
-        import traceback
-        traceback.print_exc(file=sys.stderr)
+    # Get port from environment variable or default to 10000
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port)
 
